@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# cron 설치
+RUN apt-get update && apt-get install -y cron
+
+# Python 패키지 설치
+COPY ./requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 스크립트 복사
+COPY . /app/scripts
+
+# 크론탭 복사 및 권한 설정
+COPY crontab /etc/cron.d/crontab
+RUN chmod 0644 /etc/cron.d/crontab
+RUN crontab /etc/cron.d/crontab
+
+# cron 실행
+CMD ["cron", "-f"]
