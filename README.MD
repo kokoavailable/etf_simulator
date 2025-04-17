@@ -149,5 +149,5 @@ python -m doctest -v app/services/calculation.py
 1. Python 코드 컨벤션을 준수하였으며, `pylint` 검사 결과 10.00에 수렴.
 2. 실행 환경을 로컬 환경과 Docker 자동화 배포 환경(개발기)으로 분리.
 3.  주요 엣지 케이스(28~31일, 휴장일 데이터 삽입, 매매일 계산 등)를 고려하여 적극적으로  반영.
-4. 로깅 최적화(`%s lazy`), DB/API 비동기 처리 적용으로 성능 향상.
+4. 로깅 최적화(`%s lazy`).
 5. doctest 를 활용한 edge case 테스트
