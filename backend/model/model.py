@@ -9,11 +9,22 @@ model.model 모듈
 """
 
 
-from sqlalchemy import Column, Integer, Float, JSON, DateTime, String, Numeric, Date, text
+from sqlalchemy import (
+    Column, 
+    Integer, 
+    Float, 
+    JSON, 
+    DateTime, 
+    String, 
+    Numeric, 
+    Date, 
+    text
+)
 from sqlalchemy.orm import declarative_base
 
 # SQLAlchemy ORM 모델의 부모 클래스
-Base = declarative_base()  # 이 클래스를 상속받는 모든 ORM 모델은 자동으로 metadata에 등록됨
+# 이 클래스를 상속받는 모든 ORM 모델은 자동으로 metadata에 등록됨
+Base = declarative_base()
 
 
 class Price(Base): # pylint: disable=too-few-public-methods

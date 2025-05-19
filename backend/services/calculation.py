@@ -1,7 +1,7 @@
 
 """
 calculation.py 의 서비스 모듈
-이 모듈은 계산 로직을 실행하고, 계산 결과를 반환하는 서비스 함수를 제공합니다.
+계산 로직을 실행하고, 계산 결과를 반환하는 서비스 함수를 제공.
 """
 
 import calendar
@@ -12,6 +12,7 @@ from typing import Dict, List, Tuple
 from sqlalchemy.orm import Session
 
 import pandas as pd
+import numpy as np
 
 from common.common import logger
 from model.model import Price
@@ -78,8 +79,8 @@ def adjust_to_weekday(target_date: date) -> date:
     주말(토/일)인 날짜를 이전 평일로 조정하여 반환하는 함수.
     >>> adjust_to_weekday(date(2021, 3, 6))
     datetime.date(2021, 3, 5)
-    >>> adjust_to_weekday(date(2021, 3, 1))
-    datetime.date(2021, 2, 28)
+    >>> adjust_to_weekday(date(2021, 3, 1)) # 월요일은 그대로
+    datetime.date(2021, 3, 1)
     """
     while target_date.weekday() >= 5:  # 5: 토요일, 6: 일요일
         target_date -= timedelta(days=1)
@@ -110,13 +111,15 @@ def get_trade_date(year: int, month: int, trade_day: int) -> date:
     return adjust_to_weekday(get_valid_date(year, month, trade_day))
 
 def generate_simulation_dates(start_year: int,
-                              start_month: int, trade_day: int, end_date: date) -> List[date]:
+                              start_month: int, 
+                              trade_day: int, 
+                              end_date: date) -> List[date]:
     """
     시작 연, 월, 그리고 매매일을 기반으로, 
     end_date까지 매월의 유효 거래일(매매일)을 생성하는 함수.
     
     >>> generate_simulation_dates(2021, 1, 15, date(2021, 3, 31))
-    >>> [datetime.date(2021, 1, 15), datetime.date(2021, 2, 12), datetime.date(2021, 3, 15)]
+    [datetime.date(2021, 1, 15), datetime.date(2021, 2, 15), datetime.date(2021, 3, 15)]
     """
     simulation_dates = []
     current_year = start_year
@@ -138,14 +141,17 @@ def generate_simulation_dates(start_year: int,
 
 def compute_monthly_returns(nav_series: List[Tuple[date, float]]) -> List[float]:
     """
-    nav_series ([(날짜, nav), ...])를 입력받아, 각 기간의 월간 수익률(변화율)을 계산하여 리스트로 반환합니다.
+    nav_series ([(날짜, nav), ...])를 입력받아, 각 기간의 월간 수익률(변화율)을 계산하여 리스트로 반환.
     
-    각 월의 수익률은 이전 달 NAV와 현재 달 NAV를 이용해 계산합니다.
+    각 월의 수익률은 이전 달 NAV와 현재 달 NAV를 이용해 계산.
     계산식: monthly_return = (curr_nav / prev_nav) - 1
     
-    만약 prev_nav가 0이면, 해당 월 수익률은 0으로 처리합니다.
-    >>> compute_monthly_returns([(date(2021, 1, 1), 100), (date(2021, 2, 1), 110), (date(2021, 3, 1), 120)])
-    [0.1, 0.09090909090909083]
+    만약 prev_nav가 0이면, 해당 월 수익률은 0으로 처리.
+    ※ 부동소수점 오차가 없는 값만 doctest에 적합함
+
+    >>> from datetime import date
+    >>> compute_monthly_returns([(date(2021, 1, 1), 100), (date(2021, 2, 1), 120), (date(2021, 3, 1), 144)])
+    [0.2, 0.2]
     """
     df = pd.DataFrame(nav_series, columns=["date", "nav"]).set_index("date")
     returns = (df["nav"] / df["nav"].shift(1)) - 1
@@ -163,26 +169,23 @@ def calculate_performance_metrics(
     (0.2, 0.2, 0.0, 0.0, 0.0)
     """
     # 전체 기간 수익률
-    total_return = (nav_series[-1][1] / invest) - 1
-    num_periods = len(nav_series)
+    nav_array = np.array([v for _, v in nav_series])
+    total_return = nav_array[-1] / invest - 1
+    num_periods = len(nav_array)
+
 
     if num_periods > 0:
         years = num_periods / 12
-        logger.info("시뮬레이션 마지막 날짜: %s", nav_series[-1])
-        cagr = (nav_series[-1][1] / invest) ** (1 / years) - 1 if years > 0 else 0
-        std_monthly = statistics.stdev(monthly_returns) if len(monthly_returns) > 1 else 0
-        vol = std_monthly * (12 ** 0.5)
+        cagr = (nav_array[-1] / invest) ** (1 / years) - 1 if years > 0 else 0
+        vol = np.std(monthly_returns, ddof=1) * np.sqrt(12) if len(monthly_returns) > 1 else 0
         sharpe = cagr / vol if vol != 0 else 0
     else:
         cagr = vol = sharpe = 0
 
     # 최대 손실폭 (MDD) 계산
-    peak = -float('inf')
-    mdd = 0
-    for _, value in nav_series:
-        peak = max(peak, value)
-        drawdown = (value - peak) / peak if peak > 0 else 0
-        mdd = min(mdd, drawdown)
+    peaks = np.maximum.accumulate(nav_array)
+    drawdowns = (nav_array - peaks) / peaks
+    mdd = drawdowns.min()
 
     logger.debug(
         "[성과 지표] 투자금=%.2f | 총 수익률=%.4f | CAGR=%.4f | 변동성=%.4f | Sharpe=%.4f | MDD=%.4f",
@@ -195,9 +198,9 @@ def handle_negative_tip(
         risky_assets: list,
         safe_assets: list) -> dict:
     """
-    TIP 수익률이 음수일 때, BIL에 100% 할당하고 해당 기간 수익률을 산출합니다.
-    >>> handle_negative_tip(db, date(2021, 3, 31), date(2021, 2, 28), ["SPY", "QQQ", "GLD"], "BIL")
-    ({'SPY': 0.0, 'QQQ': 0.0, 'GLD': 0.0, 'BIL': 1.0}, 0)
+    TIP 수익률이 음수일 때, BIL에 100% 할당하고 해당 기간 수익률을 산출.
+    >>> handle_negative_tip(["SPY", "QQQ", "GLD"], ["BIL"])
+    {'SPY': 0.0, 'QQQ': 0.0, 'GLD': 0.0, 'BIL': 1.0}
     """
     rebalance_weight = {etf: 0.0 for etf in risky_assets}
     rebalance_weight[safe_assets[0]] = 1.0
@@ -211,9 +214,14 @@ def handle_positive_tip(
         safe_assets: list,
         ) -> dict:
     """
-    TIP 수익률이 양수일 때, ETF 수익률을 계산하여 리밸런싱 비중과 기간 수익률을 산출합니다.
-    >>> handle_positive_tip(db, date(2021, 3, 31), date(2021, 2, 28), ["SPY", "QQQ", "GLD"], "BIL")
-    ({'SPY': 0.5, 'QQQ': 0.5, 'GLD': 0.0, 'BIL': 0.0}, 0.1)
+    TIP 수익률이 양수일 때, ETF 수익률을 계산하여 리밸런싱 비중과 기간 수익률을 산출.
+    >>> price_map = {
+    ...     ('SPY', date(2021, 2, 28)): 100, ('SPY', date(2021, 3, 31)): 110,
+    ...     ('QQQ', date(2021, 2, 28)): 100, ('QQQ', date(2021, 3, 31)): 120,
+    ...     ('GLD', date(2021, 2, 28)): 100, ('GLD', date(2021, 3, 31)): 105
+    ... }
+    >>> handle_positive_tip(price_map, date(2021, 3, 31), date(2021, 2, 28), ["SPY", "QQQ", "GLD"], ["BIL"])
+    {'SPY': 0.5, 'QQQ': 0.5, 'GLD': 0.0, 'BIL': 0.0}
     """
     etf_returns = {}
     for etf in risky_assets:
@@ -241,8 +249,9 @@ def update_nav(
         is_first = False) -> tuple:
     """
     현재 NAV를 업데이트하고, 보유 자산을 리밸런싱 합니다.
-    >>> update_nav(100, {"SPY": 0.5, "QQQ": 0.5}, {"SPY": 0.5, "QQQ": 0.5, "GLD": 0.0, "BIL": 0.0}, 0.001, 0.1)
-    (110.0, {'SPY': 0.5, 'QQQ': 0.5, 'GLD': 0.0, 'BIL': 0.0})
+    >>> rebalance_weight = {'SPY': 0.5, 'QQQ': 0.5, 'GLD': 0.0, 'BIL': 0.0}
+    >>> update_nav(100, {}, rebalance_weight, {}, 0.001, is_first=True)
+    (99.9, {'SPY': 49.95, 'QQQ': 49.95, 'GLD': 0.0, 'BIL': 0.0})
     """
     if is_first:
         target_values = {
@@ -315,18 +324,16 @@ def previous_etf_return(
     """
     당월로부터 이전 달 etf 수익률을 계산하는 함수
     """
-    etf_returns = {}
-
+    data = {}
     for etf in assets:
-        try:
-            price_current = price_map.get((etf, current_date))
-            price_prev = price_map.get((etf, prev_date))
-            raw_return = (price_current / price_prev) - 1
-            etf_returns[etf] = raw_return
-        except Exception:
-            etf_returns[etf] = 0
+        prev_price = price_map.get((etf, prev_date))
+        curr_price = price_map.get((etf, current_date), 0)
 
-    return etf_returns
+        if prev_price:
+            data[etf] = (curr_price / prev_price) - 1
+        else:
+            data[etf] = 0
+    return data
 
 def simulate_strategy(calc_input:CalculationRequest, db: Session) -> dict:
     """
@@ -342,8 +349,7 @@ def simulate_strategy(calc_input:CalculationRequest, db: Session) -> dict:
 
     반환 dict에 input 정보, output 통계, 마지막 리밸런싱 비중 등을 포함.
 
-    >>> simulate_strategy(CalculationRequest(start_year=2021, start_month=1, invest=100, trade_date=15, cost=0.001, calculate_month=2), db)
-    {'total_return': 0.2, 'cagr': 0.2, 'vol': 0.0, 'sharpe': 0.0, 'mdd': 0.0, 'input': {'start_year': 2021, 'start_month': 1, 'invest': 100, 'trade_date': 15, 'cost': 0.001, 'calculate_month': 2}, 'rebalance_weight_series': [('2021-01-15', {'SPY': 0.5, 'QQQ': 0.5, 'GLD': 0.0, 'BIL': 0.0}), ('2021-02-12', {'SPY': 0.5, 'QQQ': 0.5, 'GLD': 0.0, 'BIL': 0.0}), ('2021-03-15', {'SPY': 0.5, 'QQQ': 0.5, 'GLD': 0.0, 'BIL': 0.0})], 'nav_series': [('2021-01-15', 100.0), ('2021-02-12', 110.0), ('2021-03-15', 120.0)}
+    디비와 세션 의존으로 독테스트 불가.
     """
     logger.info("시뮬레이션 시작: 시작년도=%s, 시작월=%s, 투자금액=%.2f", calc_input.start_year, calc_input.start_month, calc_input.invest)
 

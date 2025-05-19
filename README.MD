@@ -45,6 +45,7 @@ docker system prune -a
 #### [Local]
 ```sh
 brew install postgresql
+initdb --locale=C -E UTF-8 /opt/homebrew/var/postgresql
 brew services start postgresql
 ```
 

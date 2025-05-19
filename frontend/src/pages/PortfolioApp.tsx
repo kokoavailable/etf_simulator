@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { calculateStrategy, getCalculations, getCalculationDetail, deleteCalculation } from '../api/api';
-import CalculationForm from '../components/CalculationForm';
-import CalculationList from '../components/CalculationList';
-import CalculationDetail from '../components/CalculationDetail';
+import CalculationForm from '../components/PortfolioForm';
+import CalculationList from '../components/PortfolioDetail';
+import CalculationDetail from '../components/PortfolioChart';
 
 export default function PortfolioApp() {
   const [activeTab, setActiveTab] = useState<'calculate' | 'list' | 'details'>('calculate');

@@ -69,6 +69,15 @@ def save_to_db(data):
     cur = conn.cursor()
     logger.info("DB 저장 완료: %d건", len(data))
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS prices (
+            date DATE NOT NULL,
+            ticker VARCHAR(10) NOT NULL,
+            price NUMERIC(13,4) NOT NULL,
+            PRIMARY KEY (date, ticker)
+        );
+    """)
+
     try:
         query = """
             INSERT INTO prices (date, ticker, price)
@@ -112,6 +121,8 @@ def fetch_stock_data(symbol, start_est, end_est, max_fallback_days=3):
         end_date = end_est.date()
         price_dict = build_price_dict(response) # json 응답을 딕셔너리로 변환한다.
         filled_data = apply_fallback(price_dict, symbol, start_date, end_date) # 응답으로 결측치를 채운다.
+        
+        
         save_to_db(filled_data)
         logger.info("작업 완료: %s, 저장된 데이터 %d건", symbol, len(filled_data))
     except Exception as e:

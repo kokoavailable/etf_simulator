@@ -24,15 +24,23 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-8">
+      {/* div의 높이를 화면 전체로 설정하고 배경색을 연한 회색으로 설정, y 축 패딩 0 */}
       <div className="container mx-auto px-4">
+        {/* 컨테이너의 너비를 화면에 맞게 설정하고 좌우 패딩을 추가 1em (현재나 상속받은 부모의 폰트 사이즈. 테일윈드는 16px = 1em)*/}
         <header className="mb-8 text-center">
+          {/* mb-8: 아래쪽 마진(여백) 2rem(=32px) / text-center: 가운데 정렬 */}
           <h1 className="text-3xl font-bold text-gray-900">포트폴리오 리밸런싱 분석</h1>
+          {/* text-3xl: 글씨 크기 크게(1.875rem=30px) / font-bold: 굵게 / text-gray-900: 거의 검정색 텍스트 */}
           <p className="mt-2 text-gray-600">
+            {/* mt-2: 위쪽 마진(여백) 0.5rem(=8px) / text-gray-600: 회색 텍스트 */}
             투자 포트폴리오 성과 분석 및 리밸런싱 전략 평가
           </p>
         </header>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* grid-cols-1: 1열 / lg:grid-cols-2: lg(=large) 사이즈 이상에서 2열로 변경 / gap-8: 열 사이의 간격 2rem(=32px) */}
+          
+          {/* 포트폴리오 생성 및 목록 */}
           <div className="space-y-8">
             <PortfolioForm onPortfolioCreated={handlePortfolioCreated} />
             
